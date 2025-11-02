@@ -3,7 +3,8 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import './App.css';
 
-const API_BASE_URL = 'http://localhost:5001/api';
+// Dynamic API URL for different environments
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -195,6 +196,22 @@ function App() {
   };
 
   const renderView = () => {
+    // Handle invoice detail views
+    if (currentView.startsWith('view-')) {
+      const invoiceId = currentView.replace('view-', '');
+      const invoice = invoices.find(inv => inv.id === invoiceId);
+      if (invoice) {
+        return <InvoiceDetail
+          invoice={invoice}
+          onBack={() => setCurrentView('dashboard')}
+          onEdit={() => setCurrentView('create')}
+        />;
+      }
+      // If invoice not found, go back to dashboard
+      setCurrentView('dashboard');
+      return null;
+    }
+
     switch (currentView) {
       case 'create':
         return <InvoiceCreator onSave={saveInvoice} onCancel={() => setCurrentView('dashboard')} />;
@@ -403,7 +420,6 @@ function InvoiceCreator({ onSave, onCancel }) {
     };
 
     const success = await onSave({
-      id: Date.now().toString(),
       processed_data: processedData,
       status: 'created',
       created_at: new Date().toISOString()
@@ -940,6 +956,219 @@ function InvoiceScanner({ onProcess, onCancel }) {
             ← Back to Dashboard
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceDetail({ invoice, onBack, onEdit }) {
+  const data = invoice.processed_data || {};
+
+  const handleDownloadPDF = async () => {
+    const invoiceElement = document.getElementById('invoice-detail-print');
+
+    if (!invoiceElement) {
+      alert('Invoice not found. Please try again.');
+      return;
+    }
+
+    try {
+      // Create canvas from the invoice element
+      const canvas = await html2canvas(invoiceElement, {
+        scale: 2, // Higher resolution
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: 800,
+        height: invoiceElement.scrollHeight
+      });
+
+      // Create PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+
+      // Calculate dimensions to fit A4
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 295; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Add additional pages if needed
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Download the PDF
+      const fileName = `Invoice-${data.invoice_number || invoice.id}.pdf`;
+      pdf.save(fileName);
+
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+
+  const handleSendInvoice = () => {
+    const subject = `Invoice ${data.invoice_number || invoice.id}`;
+    const body = `Please find attached invoice ${data.invoice_number || invoice.id} for $${data.total_amount || '0'}`;
+    const mailtoLink = `mailto:${data.bill_to?.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoLink);
+  };
+
+  return (
+    <div className="invoice-detail">
+      <div className="detail-header">
+        <h2>Invoice Details</h2>
+        <div className="detail-actions">
+          <button onClick={handleSendInvoice} className="btn-send">
+            📧 Send Invoice
+          </button>
+          <button onClick={handleDownloadPDF} className="btn-download">
+            📄 Download PDF
+          </button>
+          <button onClick={onEdit} className="btn-edit">
+            ✏️ Edit
+          </button>
+          <button onClick={onBack} className="btn-back">
+            ← Back to Dashboard
+          </button>
+        </div>
+      </div>
+
+      <div className="invoice-preview" id="invoice-detail-print">
+        {/* Invoice Header */}
+        <div className="invoice-header-section">
+          <div className="invoice-title">
+            <h1>INVOICE</h1>
+            <p>#{data.invoice_number || invoice.id}</p>
+          </div>
+          <div className="invoice-details">
+            <div className="detail-row">
+              <span className="label">Date of Issue:</span>
+              <span className="value">{data.current_date ? new Date(data.current_date).toLocaleDateString() : new Date(invoice.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="detail-row">
+              <span className="label">Due Date:</span>
+              <span className="value">{data.due_date ? new Date(data.due_date).toLocaleDateString() : 'N/A'}</span>
+            </div>
+            <div className="detail-row">
+              <span className="label">Status:</span>
+              <span className="value">{invoice.status || 'Created'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Billing Information */}
+        <div className="billing-section">
+          <div className="bill-from">
+            <h3>Billed From</h3>
+            <div className="billing-info">
+              <p className="name">{data.bill_from?.name || data.supplier_name || 'Your Company Name'}</p>
+              <p>{data.bill_from?.email || 'N/A'}</p>
+              <p>{(data.bill_from?.address || data.supplier_address || '').split('\n').map((line, i) => (
+                <span key={i}>{line}<br /></span>
+              ))}</p>
+            </div>
+          </div>
+          <div className="bill-to">
+            <h3>Billed To</h3>
+            <div className="billing-info">
+              <p className="name">{data.bill_to?.name || data.customer_name || 'Client Name'}</p>
+              <p>{data.bill_to?.email || 'N/A'}</p>
+              <p>{(data.bill_to?.address || data.customer_address || '').split('\n').map((line, i) => (
+                <span key={i}>{line}<br /></span>
+              ))}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <div className="items-section">
+          <table className="items-table-print">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.items && data.items.length > 0) ? data.items.map((item, index) => (
+                <tr key={index}>
+                  <td>{item.name || 'Item description'}</td>
+                  <td>{item.quantity || 1}</td>
+                  <td>${Number(item.rate || 0).toFixed(2)}</td>
+                  <td>${(Number(item.quantity || 1) * Number(item.rate || 0)).toFixed(2)}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td>Service/Item</td>
+                  <td>1</td>
+                  <td>${Number(data.total_amount || 0).toFixed(2)}</td>
+                  <td>${Number(data.total_amount || 0).toFixed(2)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totals */}
+        <div className="totals-section">
+          <div className="totals-table">
+            <div className="total-row">
+              <span>Subtotal:</span>
+              <span>${Number(data.subtotal || data.total_amount || 0).toFixed(2)}</span>
+            </div>
+            {Number(data.tax_rate || 0) > 0 && (
+              <div className="total-row">
+                <span>Tax ({Number(data.tax_rate || 0)}%):</span>
+                <span>${Number(data.tax_amount || 0).toFixed(2)}</span>
+              </div>
+            )}
+            {Number(data.discount_rate || 0) > 0 && (
+              <div className="total-row">
+                <span>Discount ({Number(data.discount_rate || 0)}%):</span>
+                <span>-${Number(data.discount_amount || 0).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="total-row final">
+              <span>Total:</span>
+              <span>${Number(data.total_amount || 0).toFixed(2)}</span>
+            </div>
+            <div className="total-row amount-due">
+              <span>Amount Due:</span>
+              <span>${Number(data.total_amount || 0).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Notes */}
+        {(data.notes || invoice.extracted_text) && (
+          <div className="notes-section">
+            {data.notes && (
+              <>
+                <h4>Notes:</h4>
+                <p>{data.notes}</p>
+              </>
+            )}
+            {invoice.extracted_text && (
+              <>
+                <h4>Extracted Text:</h4>
+                <pre className="extracted-text">{invoice.extracted_text}</pre>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

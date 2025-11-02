@@ -293,12 +293,12 @@ app.post('/api/invoices', (req, res) => {
     return res.status(400).json({ error: 'Invoice data is required' });
   }
 
-  // Generate a new unique ID for the invoice
+  // Generate a new unique ID for the invoice (ignore any client-provided ID)
   const invoiceId = uuidv4();
 
   // Clean the processed_data to remove any ID field that might conflict
   const cleanProcessedData = { ...invoiceData.processed_data };
-  delete cleanProcessedData.id; // Remove any existing ID
+  delete cleanProcessedData.id; // Remove any existing ID from processed_data
 
   db.run(`
     INSERT INTO invoices (id, filename, original_filename, extracted_text, processed_data, status)
@@ -313,7 +313,8 @@ app.post('/api/invoices', (req, res) => {
   ], function(err) {
     if (err) {
       console.error('Database error:', err);
-      return res.status(500).json({ error: 'Database error' });
+      console.error('Error details:', err.message);
+      return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
     res.json({
