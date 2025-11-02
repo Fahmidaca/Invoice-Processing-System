@@ -1,0 +1,25 @@
+{
+  "name": "invoice-processing-server",
+  "version": "1.0.0",
+  "description": "Backend API for invoice processing system",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "sqlite3": "^5.1.6",
+    "tesseract.js": "^5.0.4",
+    "sharp": "^0.33.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": ["invoice", "processing", "api", "ocr"],
+  "author": "DataSynthis Intern",
+  "license": "MIT"
+}
