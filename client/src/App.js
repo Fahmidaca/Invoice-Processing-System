@@ -125,12 +125,12 @@ function App() {
   };
 
   const saveInvoice = async (invoiceData) => {
-    // Remove id from processed_data to avoid database constraint issues
-    const { id, ...cleanInvoiceData } = invoiceData;
+    // Handle the data structure from InvoiceCreator
+    // invoiceData should have: { processed_data, status, created_at }
     const invoicePayload = {
-      processed_data: cleanInvoiceData,
-      status: 'created',
-      created_at: new Date().toISOString()
+      processed_data: invoiceData.processed_data,
+      status: invoiceData.status || 'created',
+      created_at: invoiceData.created_at || new Date().toISOString()
     };
 
     if (isOnline) {
@@ -142,9 +142,13 @@ function App() {
         });
 
         if (response.ok) {
-          // const result = await response.json();
+          const result = await response.json();
+          console.log('Invoice saved successfully:', result);
           loadInvoices();
           return true;
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to save invoice:', response.status, errorText);
         }
       } catch (error) {
         console.error('Failed to save online, saving offline:', error);
